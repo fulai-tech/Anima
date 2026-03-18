@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+.env
+.ruff_cache/
+.pytest_cache/
+anima/data/memory/users/*/history.json
+anima/data/memory/users/*/learned.md

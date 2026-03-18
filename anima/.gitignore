@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+.env
+data/memory/users/*/history.json
+data/memory/users/*/learned.md
+.ruff_cache/
+.pytest_cache/
