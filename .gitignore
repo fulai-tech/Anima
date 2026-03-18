@@ -7,5 +7,5 @@ dist/
 .env
 .ruff_cache/
 .pytest_cache/
-anima/data/memory/users/*/history.json
-anima/data/memory/users/*/learned.md
+data/memory/users/*/history.json
+data/memory/users/*/learned.md
