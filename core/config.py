@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "gpt-4o"
     llm_base_url: str | None = None
+    llm_disable_thinking: bool = False
 
     # MQTT
     mqtt_host: str = "localhost"

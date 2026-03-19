@@ -26,12 +26,17 @@ class Brain:
         self._bus = bus
         self._skill_loader = skill_loader
         self._memory = memory
+        extra_body = {}
+        if settings.llm_disable_thinking:
+            extra_body["thinking"] = {"type": "disabled"}
+
         self._llm = ChatOpenAI(
             api_key=settings.llm_api_key,
             model=settings.llm_model,
             base_url=settings.llm_base_url or None,
             temperature=0.3,
             max_tokens=1024,
+            extra_body=extra_body or None,
         )
 
     async def decide(self, device: Device, sensor_data: dict[str, Any]) -> DeviceCommand | None:

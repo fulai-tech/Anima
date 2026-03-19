@@ -15,9 +15,10 @@ services:
       - ./data:/app/data
       - ./skills:/app/skills
     environment:
-      - ANIMA_LLM_API_KEY=${LLM_API_KEY}
-      - ANIMA_LLM_MODEL=${LLM_MODEL:-gpt-4o}
-      - ANIMA_LLM_BASE_URL=${LLM_BASE_URL:-}
+      - ANIMA_LLM_API_KEY=${ANIMA_LLM_API_KEY}
+      - ANIMA_LLM_MODEL=${ANIMA_LLM_MODEL:-gpt-4o}
+      - ANIMA_LLM_BASE_URL=${ANIMA_LLM_BASE_URL:-}
+      - ANIMA_LLM_DISABLE_THINKING=${ANIMA_LLM_DISABLE_THINKING:-false}
       - ANIMA_MQTT_HOST=mqtt
       - ANIMA_MQTT_PORT=1883
     depends_on:
