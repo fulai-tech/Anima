@@ -85,7 +85,8 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
             if (d.status === 'ok') {
               setXiaomiConnected(true)
               setXiaomiDeviceCount(d.cloud_devices || 0)
-              setXiaomiResult(`连接成功！云端 ${d.cloud_devices} 台设备，更新 ${d.updated || 0} 台，新增 ${d.registered} 台。`)
+              const msg = `连接成功！云端 ${d.cloud_devices} 台设备，更新 ${d.updated || 0} 台，新增 ${d.registered} 台。`
+              setXiaomiResult(msg + (d.updated === 0 && d.registered > 0 ? '' : d.updated === 0 ? ' 如仍有设备显示"需要激活"，可能绑在其他小米账号下，请用那个账号再扫一次。' : ''))
               onDevicesChanged()
             } else {
               setXiaomiError(d.error || '登录失败')

@@ -43,8 +43,14 @@ export default function HelpPanel({ open, onClose }: HelpPanelProps) {
             <div className="ml-8 space-y-1">
               <p>点击 <Settings className="w-4 h-4 inline text-slate-400" /> → 小米/米家区域 → <strong>生成二维码</strong>。</p>
               <p>打开手机上的 <strong>米家 APP</strong>，扫描页面上的二维码。</p>
-              <p>扫码成功后，系统自动获取你小米账号下所有设备的信息和 Token。</p>
-              <p className="text-slate-400">为什么需要扫码？Token 是设备的控制密钥，小米只提供给已认证的账号主人。局域网扫描能发现设备，但拿不到 Token。</p>
+              <p>扫码成功后，系统自动获取该账号下所有设备的信息和 Token。</p>
+              <p className="text-slate-400">为什么需要扫码？Token 是设备的控制密钥，小米只提供给已认证的账号主人。局域网扫描能发现设备的存在，但拿不到 Token。</p>
+            </div>
+            <div className="ml-8 mt-2 bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs space-y-1">
+              <p className="font-medium text-amber-700">常见问题</p>
+              <p><strong>扫码后仍有设备显示"需要激活"？</strong> 该设备可能绑定在另一个小米账号上。用那个账号的米家 APP 重新扫码即可。家里有多个小米账号的，需要每个账号各扫一次。</p>
+              <p><strong>云端设备和局域网设备数量不一致？</strong> 蓝牙设备（手环、温湿度计等）没有局域网 IP，只出现在云端。只有 WiFi 设备才能本地控制。</p>
+              <p><strong>设备显示"离线"？</strong> 确认设备已通电、连上 WiFi，且和运行 Anima 的电脑在同一局域网。</p>
             </div>
           </section>
 

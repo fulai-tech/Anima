@@ -66,6 +66,8 @@ function NeedsTokenCard({ device, onActivated }: { device: Device; onActivated: 
     }
   }
 
+  const [showTokenInput, setShowTokenInput] = useState(false)
+
   return (
     <div className="bg-white border border-amber-200 rounded-xl p-5 shadow-sm">
       <div className="flex items-center justify-between mb-3">
@@ -74,31 +76,49 @@ function NeedsTokenCard({ device, onActivated }: { device: Device; onActivated: 
           <p className="text-sm text-slate-400">{device.ip || device.device_id}</p>
         </div>
         <span className="px-2 py-1 text-xs rounded-full bg-amber-50 text-amber-600 border border-amber-200">
-          需要 Token
+          需要激活
         </span>
       </div>
 
-      <p className="text-sm text-slate-500 mb-3">
-        已在局域网发现此设备，输入 Token 即可激活控制。
-      </p>
-
-      <div className="flex gap-2">
-        <input
-          type="text"
-          placeholder="输入 32 位 Token"
-          value={token}
-          onChange={e => setToken(e.target.value)}
-          className="flex-1 px-3 py-2 text-sm font-mono border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
-        />
-        <button
-          onClick={handleActivate}
-          disabled={activating || !token}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm bg-violet-500 hover:bg-violet-600 disabled:opacity-40 text-white rounded-lg transition-colors cursor-pointer"
-        >
-          {activating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
-          激活
-        </button>
+      <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 mb-3 text-sm text-slate-600 space-y-2">
+        <p className="font-medium text-slate-700">已在局域网发现此设备，但缺少 Token（设备控制密钥）。</p>
+        <p className="text-slate-500">请按以下方法获取 Token：</p>
+        <ol className="list-decimal ml-4 space-y-1 text-slate-500">
+          <li><strong>扫码登录</strong>（推荐）— 点击右上角 ⚙ 设置 → 小米/米家 → 生成二维码 → 用绑定了此设备的米家 APP 扫码</li>
+          <li><strong>多账号？</strong> — 如果扫码后此设备仍需 Token，说明它绑在另一个小米账号下。用那个账号重新扫码即可</li>
+          <li><strong>手动输入</strong> — 如果你已有 Token，点击下方「输入 Token」直接填入</li>
+        </ol>
       </div>
+
+      {showTokenInput ? (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="输入 32 位 Token"
+              value={token}
+              onChange={e => setToken(e.target.value)}
+              className="flex-1 px-3 py-2 text-sm font-mono border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
+            />
+            <button
+              onClick={handleActivate}
+              disabled={activating || !token}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm bg-violet-500 hover:bg-violet-600 disabled:opacity-40 text-white rounded-lg transition-colors cursor-pointer"
+            >
+              {activating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
+              激活
+            </button>
+          </div>
+          <button onClick={() => setShowTokenInput(false)} className="text-xs text-slate-400 hover:text-slate-500 cursor-pointer">收起</button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowTokenInput(true)}
+          className="text-sm text-violet-500 hover:text-violet-600 cursor-pointer"
+        >
+          输入 Token
+        </button>
+      )}
       {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
       {success && <p className="text-sm text-emerald-600 mt-2 flex items-center gap-1"><Check className="w-4 h-4" />{success}</p>}
     </div>
