@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
-import { Activity, RefreshCw, Wifi, WifiOff, Settings } from 'lucide-react'
+import { Activity, RefreshCw, Wifi, WifiOff, Settings, HelpCircle } from 'lucide-react'
 import { api } from '../hooks/useApi'
 
 interface HeaderProps {
   deviceCount: number
   onScan: () => void
   onOpenSettings: () => void
+  onOpenHelp: () => void
 }
 
-export default function Header({ deviceCount, onScan, onOpenSettings }: HeaderProps) {
+export default function Header({ deviceCount, onScan, onOpenSettings, onOpenHelp }: HeaderProps) {
   const [connected, setConnected] = useState(false)
   const [scanning, setScanning] = useState(false)
 
@@ -66,6 +67,14 @@ export default function Header({ deviceCount, onScan, onOpenSettings }: HeaderPr
           title="设置"
         >
           <Settings className="w-5 h-5 text-slate-500" />
+        </button>
+
+        <button
+          onClick={onOpenHelp}
+          className="p-2 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+          title="使用帮助"
+        >
+          <HelpCircle className="w-5 h-5 text-slate-500" />
         </button>
       </div>
     </header>

@@ -36,7 +36,19 @@ docker compose up mqtt -d
 pnpm dev
 ```
 
-Open **http://localhost:3000** — you'll see the Anima Dashboard with device list, sensor cards, AI decision stream, and chat bar.
+Open **http://localhost:3000** — you'll see the Anima Dashboard.
+
+### After Launch: Connect Your Devices
+
+1. Click **⚙ Settings** (top-right gear icon)
+2. In **LLM Brain** section, enter your API Key and model config (or use .env)
+3. In **Xiaomi** section, click **Generate QR Code**
+4. Open **Mi Home app** on your phone and scan the QR code
+5. Done — all your Xiaomi devices and tokens are fetched automatically
+
+> **Why QR scan?** Tokens are device control keys stored on Xiaomi's cloud servers. Local network scanning can find devices but cannot get tokens. QR login is the most reliable authentication method — no password input, no captcha issues.
+
+Click the **? Help** button (top-right) for a step-by-step guide inside the Dashboard.
 
 ### Prerequisites
 

@@ -5,6 +5,7 @@ import DeviceCard from './components/DeviceCard'
 import DecisionLog from './components/DecisionLog'
 import ChatBar from './components/ChatBar'
 import SettingsPanel from './components/SettingsPanel'
+import HelpPanel from './components/HelpPanel'
 import { useDevices, useDecisions } from './hooks/useApi'
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
   const { decisions } = useDecisions()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">
@@ -19,6 +21,7 @@ export default function App() {
         deviceCount={devices.length}
         onScan={refresh}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenHelp={() => setHelpOpen(true)}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -37,6 +40,10 @@ export default function App() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onDevicesChanged={refresh}
+      />
+      <HelpPanel
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
       />
     </div>
   )
