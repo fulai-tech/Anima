@@ -9,3 +9,5 @@ dist/
 .pytest_cache/
 data/memory/users/*/history.json
 data/memory/users/*/learned.md
+node_modules/
+dashboard/dist/

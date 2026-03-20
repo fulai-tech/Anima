@@ -1,0 +1,16 @@
+{
+  "name": "anima",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Make Every Hardware Intelligent",
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",
+    "dev:frontend": "pnpm --filter dashboard dev",
+    "dev:backend": "cd . && uv run python -m core.main",
+    "build": "pnpm --filter dashboard build",
+    "postinstall": "uv sync --extra dev --python 3.13"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
