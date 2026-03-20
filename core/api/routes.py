@@ -309,43 +309,71 @@ def create_app(app_state: dict[str, Any]) -> FastAPI:
         store.set("xiaomi_cloud_devices", cloud_devices)
         store.set("xiaomi_cloud_country", region)
 
-        # Register devices
+        # Register devices — merge with existing local-discovered devices by IP
         discovery = app_state["discovery"]
         miot = next((a for a in discovery._adapters if isinstance(a, MIoTAdapter)), None)
         registered = 0
+        updated = 0
         if miot:
+            # Build IP → existing device_id lookup
+            ip_to_existing: dict[str, str] = {}
+            for did_key, info in miot._device_infos.items():
+                if info.get("ip"):
+                    ip_to_existing[info["ip"]] = did_key
+
             for cd in cloud_devices:
                 did = cd.get("did", "")
                 if not did:
                     continue
-                device_id = f"miot_cloud_{did}"
                 ip = cd.get("localip", "")
                 token = cd.get("token", "")
                 model = cd.get("model", "unknown")
+                name = cd.get("name", model)
                 device_type = miot._guess_device_type(model)
                 has_token = bool(token) and token != "0" * 32
 
-                device = Device(
-                    device_id=device_id,
-                    name=cd.get("name", model),
-                    adapter="miot",
-                    type=device_type,
-                    online=bool(cd.get("isOnline", False)),
-                    capabilities=miot._default_capabilities(device_type) if has_token else [],
-                    sensors=miot._default_sensors(device_type) if has_token else [],
-                )
-                miot._device_infos[device_id] = {
-                    "ip": ip, "token": token, "model": model, "did": did,
-                    "needs_token": not has_token,
-                }
-                if device_id not in discovery.devices:
-                    discovery.devices[device_id] = device
-                    discovery._adapter_map[device_id] = miot
-                    registered += 1
+                # Check if this device already exists (matched by IP)
+                existing_id = ip_to_existing.get(ip) if ip else None
+
+                if existing_id and existing_id in discovery.devices:
+                    # Update existing device with cloud data
+                    device = discovery.devices[existing_id]
+                    device.name = name
+                    device.type = device_type
+                    device.online = bool(cd.get("isOnline", False))
+                    if has_token:
+                        device.capabilities = miot._default_capabilities(device_type)
+                        device.sensors = miot._default_sensors(device_type)
+                    miot._device_infos[existing_id] = {
+                        "ip": ip, "token": token, "model": model, "did": did,
+                        "needs_token": not has_token,
+                    }
+                    updated += 1
+                else:
+                    # New device from cloud
+                    device_id = f"miot_cloud_{did}"
+                    device = Device(
+                        device_id=device_id,
+                        name=name,
+                        adapter="miot",
+                        type=device_type,
+                        online=bool(cd.get("isOnline", False)),
+                        capabilities=miot._default_capabilities(device_type) if has_token else [],
+                        sensors=miot._default_sensors(device_type) if has_token else [],
+                    )
+                    miot._device_infos[device_id] = {
+                        "ip": ip, "token": token, "model": model, "did": did,
+                        "needs_token": not has_token,
+                    }
+                    if device_id not in discovery.devices:
+                        discovery.devices[device_id] = device
+                        discovery._adapter_map[device_id] = miot
+                        registered += 1
 
         return {
             "status": "ok",
             "cloud_devices": len(cloud_devices),
+            "updated": updated,
             "registered": registered,
             "total": len(discovery.devices),
         }

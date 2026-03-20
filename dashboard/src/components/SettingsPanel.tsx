@@ -85,7 +85,7 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
             if (d.status === 'ok') {
               setXiaomiConnected(true)
               setXiaomiDeviceCount(d.cloud_devices || 0)
-              setXiaomiResult(`连接成功！发现 ${d.cloud_devices} 台设备，已注册 ${d.registered} 台。`)
+              setXiaomiResult(`连接成功！云端 ${d.cloud_devices} 台设备，更新 ${d.updated || 0} 台，新增 ${d.registered} 台。`)
               onDevicesChanged()
             } else {
               setXiaomiError(d.error || '登录失败')
