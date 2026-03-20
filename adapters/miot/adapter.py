@@ -120,42 +120,93 @@ class MIoTAdapter(BaseAdapter):
 
         return devices
 
-    # ── mDNS Discovery (fallback) ──
+    # ── Local Network Discovery (UDP broadcast) ──
 
-    async def _discover_mdns(self) -> list[Device]:
-        """Discover devices via local mDNS — fallback when cloud is not configured."""
+    async def _discover_local(self) -> list[Device]:
+        """Discover Xiaomi devices via UDP broadcast handshake on port 54321.
+        Finds all miio devices on the local network, even without tokens."""
+        import socket
+        import struct
+
+        HELLO = bytes.fromhex(
+            "21310020ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        )
+        PORT = 54321
         devices: list[Device] = []
-        try:
-            found = miio.Discovery.discover_mdns(timeout=5)
-            for addr, info in found.items():
-                try:
-                    ip = info.ip if hasattr(info, "ip") else str(addr)
-                    token = getattr(info, "token", None)
-                    model = getattr(info, "model", "unknown")
 
-                    if not token or token == "0" * 32:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.settimeout(3)
+
+            sock.sendto(HELLO, ("<broadcast>", PORT))
+            logger.info("Sent miio UDP broadcast on port %d...", PORT)
+
+            while True:
+                try:
+                    data, addr = sock.recvfrom(1024)
+                    ip = addr[0]
+
+                    if len(data) < 32 or data[:2] != b"\x21\x31":
                         continue
 
-                    device_id = self._build_device_id(ip, model)
-                    device_type = self._guess_device_type(model)
+                    did = struct.unpack(">I", data[8:12])[0]
+                    token_bytes = data[16:32]
+                    token = token_bytes.hex()
+                    has_token = token != "0" * 32 and token != "f" * 32
+
+                    device_id = f"miot_local_{did}"
+
+                    # Try to get model if we have a token
+                    model = "xiaomi.device"
+                    device_type = "unknown"
+                    if has_token:
+                        try:
+                            dev = miio.Device(ip=ip, token=token)
+                            info = dev.info()
+                            model = info.model or model
+                            device_type = self._guess_device_type(model)
+                        except Exception:
+                            pass
+
+                    name = f"小米设备 ({ip})" if not has_token else f"{model} ({ip})"
 
                     device = Device(
                         device_id=device_id,
-                        name=f"{model} ({ip})",
+                        name=name,
                         adapter=self.name,
                         type=device_type,
-                        capabilities=self._default_capabilities(device_type),
-                        sensors=self._default_sensors(device_type),
+                        online=True,
+                        capabilities=self._default_capabilities(device_type) if has_token else [],
+                        sensors=self._default_sensors(device_type) if has_token else [],
                     )
                     devices.append(device)
-                    self._device_infos[device_id] = {"ip": ip, "token": token, "model": model}
 
-                except Exception:
-                    logger.exception("Failed to process mDNS device at %s", addr)
+                    if has_token:
+                        self._device_infos[device_id] = {
+                            "ip": ip, "token": token, "model": model, "did": str(did),
+                        }
+                    else:
+                        # Store IP + DID so user can add token later
+                        self._device_infos[device_id] = {
+                            "ip": ip, "token": "", "model": model, "did": str(did),
+                            "needs_token": True,
+                        }
+
+                    logger.info(
+                        "Local scan: ip=%s did=%d token=%s",
+                        ip, did, "available" if has_token else "needs_setup",
+                    )
+
+                except socket.timeout:
+                    break
+
+            sock.close()
 
         except Exception:
-            logger.exception("MIoT mDNS discovery failed")
+            logger.exception("UDP broadcast discovery failed")
 
+        logger.info("Local scan found %d Xiaomi devices", len(devices))
         return devices
 
     async def _load_manual_devices(self) -> list[Device]:
@@ -191,19 +242,37 @@ class MIoTAdapter(BaseAdapter):
         return devices
 
     async def discover(self) -> list[Device]:
-        # 1. Load manually added devices (always)
-        devices = await self._load_manual_devices()
+        seen_ips: set[str] = set()
+        devices: list[Device] = []
+
+        # 1. Load manually added devices (always first, highest priority)
+        manual = await self._load_manual_devices()
+        for d in manual:
+            info = self._device_infos.get(d.device_id, {})
+            if info.get("ip"):
+                seen_ips.add(info["ip"])
+        devices.extend(manual)
 
         # 2. Try cloud discovery
-        cloud_devices = await self._discover_cloud()
-        devices.extend(cloud_devices)
+        cloud = await self._discover_cloud()
+        for d in cloud:
+            info = self._device_infos.get(d.device_id, {})
+            ip = info.get("ip", "")
+            if ip and ip not in seen_ips:
+                seen_ips.add(ip)
+                devices.append(d)
 
-        # 3. mDNS fallback if cloud returned nothing
-        if not cloud_devices:
-            mdns_devices = await self._discover_mdns()
-            devices.extend(mdns_devices)
+        # 3. Local network UDP scan (finds devices even without tokens)
+        local = await self._discover_local()
+        for d in local:
+            info = self._device_infos.get(d.device_id, {})
+            ip = info.get("ip", "")
+            if ip and ip not in seen_ips:
+                seen_ips.add(ip)
+                devices.append(d)
 
-        logger.info("MIoT discovered %d devices total", len(devices))
+        logger.info("MIoT discovered %d devices total (%d manual, %d cloud, %d local)",
+                     len(devices), len(manual), len(cloud), len(local))
         return devices
 
     def _get_miio_device(self, device_id: str) -> miio.Device | None:

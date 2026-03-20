@@ -27,7 +27,7 @@ export default function App() {
           selectedId={selectedId}
           onSelect={(id) => setSelectedId(id === selectedId ? null : id)}
         />
-        <DeviceCard devices={devices} selectedId={selectedId} />
+        <DeviceCard devices={devices} selectedId={selectedId} onDevicesChanged={refresh} />
         <DecisionLog decisions={decisions} />
       </div>
 

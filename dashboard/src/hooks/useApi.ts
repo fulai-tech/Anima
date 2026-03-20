@@ -9,6 +9,8 @@ export interface Device {
   online: boolean
   capabilities: { name: string; params?: Record<string, unknown> }[]
   sensors: { name: string; unit: string; value: number | string | boolean | null }[]
+  needs_token?: boolean
+  ip?: string
 }
 
 export interface Decision {

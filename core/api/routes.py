@@ -32,6 +32,10 @@ class ManualDeviceRequest(BaseModel):
     device_type: str = "unknown"
 
 
+class ActivateDeviceRequest(BaseModel):
+    token: str
+
+
 def create_app(app_state: dict[str, Any]) -> FastAPI:
     app = FastAPI(title="Anima", description="Make Every Hardware Intelligent", version="0.1.0")
 
@@ -48,8 +52,20 @@ def create_app(app_state: dict[str, Any]) -> FastAPI:
 
     @app.get("/api/devices")
     async def list_devices():
+        from adapters.miot.adapter import MIoTAdapter
         discovery = app_state["discovery"]
-        return [d.model_dump() for d in discovery.get_all_devices()]
+        miot = next((a for a in discovery._adapters if isinstance(a, MIoTAdapter)), None)
+
+        result = []
+        for d in discovery.get_all_devices():
+            data = d.model_dump()
+            # Check if device needs token activation
+            if miot:
+                info = miot._device_infos.get(d.device_id, {})
+                data["needs_token"] = info.get("needs_token", False)
+                data["ip"] = info.get("ip", "")
+            result.append(data)
+        return result
 
     @app.get("/api/devices/{device_id}")
     async def get_device(device_id: str):
@@ -157,6 +173,68 @@ def create_app(app_state: dict[str, Any]) -> FastAPI:
             "model": model,
         }
 
+    @app.post("/api/devices/{device_id}/activate")
+    async def activate_device(device_id: str, req: ActivateDeviceRequest):
+        """Activate a discovered device by providing its token."""
+        from adapters.miot.adapter import MIoTAdapter
+        import miio as miio_lib
+
+        discovery = app_state["discovery"]
+        store = app_state["settings"]
+
+        device = discovery.get_device(device_id)
+        if not device:
+            return {"success": False, "error": "设备未找到"}
+
+        miot = next((a for a in discovery._adapters if isinstance(a, MIoTAdapter)), None)
+        if not miot:
+            return {"success": False, "error": "MIoT adapter not found"}
+
+        info = miot._device_infos.get(device_id, {})
+        ip = info.get("ip", "")
+        if not ip:
+            return {"success": False, "error": "设备 IP 未知"}
+
+        # Try to probe device with the provided token
+        model = "xiaomi.device"
+        device_type = "unknown"
+        try:
+            dev = miio_lib.Device(ip=ip, token=req.token)
+            dev_info = dev.info()
+            model = dev_info.model or model
+            device_type = miot._guess_device_type(model)
+        except Exception as e:
+            return {"success": False, "error": f"Token 验证失败: {e}"}
+
+        # Update device info
+        miot._device_infos[device_id] = {
+            "ip": ip, "token": req.token, "model": model,
+            "did": info.get("did", ""),
+        }
+
+        # Update device object
+        device.name = f"{model} ({ip})"
+        device.type = device_type
+        device.capabilities = miot._default_capabilities(device_type)
+        device.sensors = miot._default_sensors(device_type)
+
+        # Save as manual device for persistence
+        manual_devices = store.get("manual_devices", [])
+        manual_devices = [d for d in manual_devices if d.get("ip") != ip]
+        manual_devices.append({
+            "ip": ip, "token": req.token, "name": device.name,
+            "device_type": device_type, "model": model,
+        })
+        store.set("manual_devices", manual_devices)
+
+        return {
+            "success": True,
+            "device_id": device_id,
+            "name": device.name,
+            "type": device_type,
+            "model": model,
+        }
+
     # ── Settings API ──
 
     @app.get("/api/settings")
@@ -174,48 +252,108 @@ def create_app(app_state: dict[str, Any]) -> FastAPI:
     @app.get("/api/settings/xiaomi/status")
     async def xiaomi_status():
         store = app_state["settings"]
+        device_count = len(store.get("xiaomi_cloud_devices", []))
         return {
-            "configured": store.is_xiaomi_configured(),
-            "username": store.get("xiaomi_cloud_user", ""),
-            "country": store.get_xiaomi_country(),
+            "configured": device_count > 0,
+            "device_count": device_count,
+            "country": store.get("xiaomi_cloud_country", "cn"),
         }
 
-    @app.post("/api/settings/xiaomi/connect")
-    async def xiaomi_connect(req: XiaomiLoginRequest):
-        store = app_state["settings"]
-        # Test login before saving
-        try:
-            from micloud import MiCloud
-            mc = MiCloud(username=req.username, password=req.password)
-            mc.login()
-            device_count = len(mc.get_devices(country=req.country) or [])
-        except Exception as e:
-            logger.exception("Xiaomi Cloud login failed")
-            return {"success": False, "error": f"登录失败: {e}"}
-
-        # Save credentials
-        store.update({
-            "xiaomi_cloud_user": req.username,
-            "xiaomi_cloud_pass": req.password,
-            "xiaomi_cloud_country": req.country,
-        })
-
-        # Trigger re-scan
-        discovery = app_state["discovery"]
-        new_devices = await discovery.scan()
-
+    @app.post("/api/settings/xiaomi/qr/start")
+    async def xiaomi_qr_start():
+        """Start QR code login flow."""
+        from adapters.miot.xiaomi_cloud import QrLoginFlow
+        flow = QrLoginFlow()
+        result = flow.start()
+        if result["status"] == "error":
+            return {"success": False, "error": result["error"]}
+        app_state["_xiaomi_qr_flow"] = flow
         return {
             "success": True,
-            "cloud_devices": device_count,
-            "discovered": len(new_devices),
+            "status": "qr_required",
+            "qr_image_b64": result.get("qr_image_b64", ""),
+        }
+
+    @app.post("/api/settings/xiaomi/qr/poll")
+    async def xiaomi_qr_poll(body: dict = {}):
+        """Poll QR login status."""
+        from adapters.miot.xiaomi_cloud import fetch_all_devices
+        from adapters.miot.adapter import MIoTAdapter
+        from core.models import Device, Event, EventType
+
+        flow = app_state.get("_xiaomi_qr_flow")
+        if not flow:
+            return {"status": "error", "error": "没有进行中的扫码登录"}
+
+        region = body.get("country", "cn") or "cn"
+        result = flow.poll()
+
+        if result["status"] == "qr_pending":
+            return {"status": "qr_pending"}
+        if result["status"] in ("error", "qr_expired"):
+            app_state.pop("_xiaomi_qr_flow", None)
+            return {"status": "error", "error": result.get("error", "登录失败")}
+        if result["status"] != "ok":
+            return {"status": "error", "error": "未知状态"}
+
+        # Login OK — fetch devices
+        try:
+            cloud_devices = fetch_all_devices(flow.connector, region)
+        except Exception as e:
+            logger.exception("Failed to fetch devices after QR login")
+            app_state.pop("_xiaomi_qr_flow", None)
+            return {"status": "error", "error": f"获取设备列表失败: {e}"}
+
+        app_state.pop("_xiaomi_qr_flow", None)
+        store = app_state["settings"]
+        store.set("xiaomi_cloud_devices", cloud_devices)
+        store.set("xiaomi_cloud_country", region)
+
+        # Register devices
+        discovery = app_state["discovery"]
+        miot = next((a for a in discovery._adapters if isinstance(a, MIoTAdapter)), None)
+        registered = 0
+        if miot:
+            for cd in cloud_devices:
+                did = cd.get("did", "")
+                if not did:
+                    continue
+                device_id = f"miot_cloud_{did}"
+                ip = cd.get("localip", "")
+                token = cd.get("token", "")
+                model = cd.get("model", "unknown")
+                device_type = miot._guess_device_type(model)
+                has_token = bool(token) and token != "0" * 32
+
+                device = Device(
+                    device_id=device_id,
+                    name=cd.get("name", model),
+                    adapter="miot",
+                    type=device_type,
+                    online=bool(cd.get("isOnline", False)),
+                    capabilities=miot._default_capabilities(device_type) if has_token else [],
+                    sensors=miot._default_sensors(device_type) if has_token else [],
+                )
+                miot._device_infos[device_id] = {
+                    "ip": ip, "token": token, "model": model, "did": did,
+                    "needs_token": not has_token,
+                }
+                if device_id not in discovery.devices:
+                    discovery.devices[device_id] = device
+                    discovery._adapter_map[device_id] = miot
+                    registered += 1
+
+        return {
+            "status": "ok",
+            "cloud_devices": len(cloud_devices),
+            "registered": registered,
             "total": len(discovery.devices),
         }
 
     @app.post("/api/settings/xiaomi/disconnect")
     async def xiaomi_disconnect():
         store = app_state["settings"]
-        store.delete("xiaomi_cloud_user")
-        store.delete("xiaomi_cloud_pass")
+        store.delete("xiaomi_cloud_devices")
         store.delete("xiaomi_cloud_country")
         return {"success": True}
 

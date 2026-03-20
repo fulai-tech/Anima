@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Wifi, WifiOff, Brain, Eye, EyeOff, X, Check, Loader2, Plus, Monitor } from 'lucide-react'
+import { Wifi, WifiOff, Brain, Eye, EyeOff, X, Check, Loader2, Plus, Monitor, Settings } from 'lucide-react'
 
 interface SettingsPanelProps {
   open: boolean
@@ -9,13 +9,13 @@ interface SettingsPanelProps {
 
 export default function SettingsPanel({ open, onClose, onDevicesChanged }: SettingsPanelProps) {
   // Xiaomi state
-  const [xiaomiUser, setXiaomiUser] = useState('')
-  const [xiaomiPass, setXiaomiPass] = useState('')
   const [xiaomiCountry, setXiaomiCountry] = useState('cn')
   const [xiaomiConnected, setXiaomiConnected] = useState(false)
-  const [xiaomiConnecting, setXiaomiConnecting] = useState(false)
+  const [xiaomiDeviceCount, setXiaomiDeviceCount] = useState(0)
   const [xiaomiError, setXiaomiError] = useState('')
   const [xiaomiResult, setXiaomiResult] = useState('')
+  const [qrImage, setQrImage] = useState('')
+  const [qrPolling, setQrPolling] = useState(false)
 
   // LLM state
   const [llmKey, setLlmKey] = useState('')        // masked key for display
@@ -38,7 +38,6 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
   const [manualResult, setManualResult] = useState('')
   const [manualError, setManualError] = useState('')
 
-  const [showPass, setShowPass] = useState(false)
   const [showKey, setShowKey] = useState(false)
 
   useEffect(() => {
@@ -46,7 +45,7 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
     // Load current status
     fetch('/api/settings/xiaomi/status').then(r => r.json()).then(data => {
       setXiaomiConnected(data.configured)
-      if (data.username) setXiaomiUser(data.username)
+      setXiaomiDeviceCount(data.device_count || 0)
       if (data.country) setXiaomiCountry(data.country)
     }).catch(() => {})
 
@@ -60,38 +59,56 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
     }).catch(() => {})
   }, [open])
 
-  const handleXiaomiConnect = async () => {
-    if (!xiaomiUser || !xiaomiPass) return
-    setXiaomiConnecting(true)
+  const handleStartQr = async () => {
     setXiaomiError('')
     setXiaomiResult('')
-
+    setQrImage('')
     try {
-      const res = await fetch('/api/settings/xiaomi/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: xiaomiUser, password: xiaomiPass, country: xiaomiCountry }),
-      })
+      const res = await fetch('/api/settings/xiaomi/qr/start', { method: 'POST' })
       const data = await res.json()
-      if (data.success) {
-        setXiaomiConnected(true)
-        setXiaomiResult(`连接成功！发现 ${data.cloud_devices} 台云端设备，已添加 ${data.discovered} 台新设备。`)
-        setXiaomiPass('')
-        onDevicesChanged()
+      if (data.success && data.qr_image_b64) {
+        setQrImage(data.qr_image_b64)
+        setQrPolling(true)
+        // Start polling
+        const pollInterval = setInterval(async () => {
+          try {
+            const r = await fetch('/api/settings/xiaomi/qr/poll', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ country: xiaomiCountry }),
+            })
+            const d = await r.json()
+            if (d.status === 'qr_pending') return // keep waiting
+            clearInterval(pollInterval)
+            setQrPolling(false)
+            setQrImage('')
+            if (d.status === 'ok') {
+              setXiaomiConnected(true)
+              setXiaomiDeviceCount(d.cloud_devices || 0)
+              setXiaomiResult(`连接成功！发现 ${d.cloud_devices} 台设备，已注册 ${d.registered} 台。`)
+              onDevicesChanged()
+            } else {
+              setXiaomiError(d.error || '登录失败')
+            }
+          } catch {
+            clearInterval(pollInterval)
+            setQrPolling(false)
+            setQrImage('')
+            setXiaomiError('网络错误')
+          }
+        }, 2000)
       } else {
-        setXiaomiError(data.error || '连接失败')
+        setXiaomiError(data.error || '获取二维码失败')
       }
     } catch {
-      setXiaomiError('网络错误，请检查后端是否运行')
-    } finally {
-      setXiaomiConnecting(false)
+      setXiaomiError('网络错误')
     }
   }
 
   const handleXiaomiDisconnect = async () => {
     await fetch('/api/settings/xiaomi/disconnect', { method: 'POST' })
     setXiaomiConnected(false)
-    setXiaomiUser('')
+    setXiaomiDeviceCount(0)
     setXiaomiResult('')
   }
 
@@ -147,37 +164,24 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
             <div className="flex items-center gap-2 mb-3">
               {xiaomiConnected ? <Wifi className="w-4 h-4 text-emerald-500" /> : <WifiOff className="w-4 h-4 text-slate-400" />}
               <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">小米 / 米家</h3>
-              {xiaomiConnected && <span className="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">已连接</span>}
+              {xiaomiConnected && <span className="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">已连接 · {xiaomiDeviceCount} 台设备</span>}
             </div>
 
-            {xiaomiConnected ? (
+            {xiaomiConnected && !qrImage ? (
               <div>
-                <p className="text-sm text-slate-500 mb-2">已登录: {xiaomiUser}</p>
+                <p className="text-sm text-slate-500 mb-2">已获取 {xiaomiDeviceCount} 台设备的信息和 Token。</p>
                 {xiaomiResult && <p className="text-sm text-emerald-600 mb-2">{xiaomiResult}</p>}
-                <button onClick={handleXiaomiDisconnect} className="text-sm text-red-500 hover:text-red-600 cursor-pointer">断开连接</button>
+                <div className="flex gap-3">
+                  <button onClick={handleStartQr} className="text-sm text-violet-500 hover:text-violet-600 cursor-pointer">重新扫码刷新</button>
+                  <button onClick={handleXiaomiDisconnect} className="text-sm text-red-500 hover:text-red-600 cursor-pointer">断开连接</button>
+                </div>
               </div>
             ) : (
               <div className="space-y-3">
-                <p className="text-sm text-slate-500">登录小米账号，自动获取所有绑定的智能设备和 token。</p>
-                <input
-                  type="text"
-                  placeholder="小米账号（手机号或邮箱）"
-                  value={xiaomiUser}
-                  onChange={e => setXiaomiUser(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
-                />
-                <div className="relative">
-                  <input
-                    type={showPass ? 'text' : 'password'}
-                    placeholder="密码"
-                    value={xiaomiPass}
-                    onChange={e => setXiaomiPass(e.target.value)}
-                    className="w-full px-3 py-2 pr-10 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
-                  />
-                  <button onClick={() => setShowPass(!showPass)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 cursor-pointer">
-                    {showPass ? <EyeOff className="w-4 h-4 text-slate-400" /> : <Eye className="w-4 h-4 text-slate-400" />}
-                  </button>
-                </div>
+                <p className="text-sm text-slate-500">
+                  用米家 APP 扫码登录，自动获取所有设备和 Token。无需输入账号密码，成功率极高。
+                </p>
+
                 <select
                   value={xiaomiCountry}
                   onChange={e => setXiaomiCountry(e.target.value)}
@@ -192,17 +196,31 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
                   <option value="ru">俄罗斯</option>
                 </select>
 
+                {qrImage ? (
+                  <div className="text-center space-y-2">
+                    <img
+                      src={`data:image/png;base64,${qrImage}`}
+                      alt="扫码登录"
+                      className="mx-auto w-48 h-48 rounded-xl border border-slate-200"
+                    />
+                    <p className="text-sm text-violet-600 flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      请用米家 APP 扫码...
+                    </p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleStartQr}
+                    disabled={qrPolling}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm bg-violet-500 hover:bg-violet-600 disabled:opacity-40 text-white rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Wifi className="w-4 h-4" />
+                    生成二维码
+                  </button>
+                )}
+
                 {xiaomiError && <p className="text-sm text-red-500">{xiaomiError}</p>}
                 {xiaomiResult && <p className="text-sm text-emerald-600">{xiaomiResult}</p>}
-
-                <button
-                  onClick={handleXiaomiConnect}
-                  disabled={xiaomiConnecting || !xiaomiUser || !xiaomiPass}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm bg-violet-500 hover:bg-violet-600 disabled:opacity-40 text-white rounded-lg transition-colors cursor-pointer"
-                >
-                  {xiaomiConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
-                  {xiaomiConnecting ? '连接中...' : '连接小米云服务'}
-                </button>
               </div>
             )}
           </section>

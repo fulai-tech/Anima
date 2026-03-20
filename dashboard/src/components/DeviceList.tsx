@@ -51,16 +51,16 @@ export default function DeviceList({ devices, selectedId, onSelect }: DeviceList
                     selectedId === d.device_id ? 'bg-violet-50 border-l-2 border-violet-500' : 'border-l-2 border-transparent'
                   }`}
                 >
-                  <span className={`${d.online ? 'text-violet-500' : 'text-slate-300'}`}>
+                  <span className={`${d.needs_token ? 'text-amber-400' : d.online ? 'text-violet-500' : 'text-slate-300'}`}>
                     <Icon type={d.type} />
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-700 truncate">{d.name}</p>
                     <p className="text-xs text-slate-400">
-                      {TYPE_LABELS[d.type] || d.type} · {d.adapter}
+                      {d.needs_token ? '需要 Token' : (TYPE_LABELS[d.type] || d.type)} · {d.adapter}
                     </p>
                   </div>
-                  <span className={`w-2 h-2 rounded-full ${d.online ? 'bg-emerald-400' : 'bg-slate-300'}`} />
+                  <span className={`w-2 h-2 rounded-full ${d.needs_token ? 'bg-amber-400' : d.online ? 'bg-emerald-400' : 'bg-slate-300'}`} />
                 </button>
               </li>
             ))}
