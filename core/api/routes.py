@@ -150,10 +150,15 @@ def create_app(app_state: dict[str, Any]) -> FastAPI:
         from core.config import settings as env_settings
         store = app_state["settings"]
         api_key = store.get("llm_api_key", "") or env_settings.llm_api_key
+        # Mask key for display: show first 8 chars + ***
+        masked_key = (api_key[:8] + "***") if api_key else ""
+        disable_thinking = store.get("llm_disable_thinking", env_settings.llm_disable_thinking)
         return {
             "configured": bool(api_key),
+            "masked_key": masked_key,
             "model": store.get("llm_model", "") or env_settings.llm_model,
             "base_url": store.get("llm_base_url", "") or env_settings.llm_base_url or "",
+            "disable_thinking": disable_thinking,
             "source": "dashboard" if store.get("llm_api_key") else "env",
         }
 

@@ -18,7 +18,8 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
   const [xiaomiResult, setXiaomiResult] = useState('')
 
   // LLM state
-  const [llmKey, setLlmKey] = useState('')
+  const [llmKey, setLlmKey] = useState('')        // masked key for display
+  const [llmNewKey, setLlmNewKey] = useState('')   // new key input
   const [llmModel, setLlmModel] = useState('gpt-4o')
   const [llmBaseUrl, setLlmBaseUrl] = useState('')
   const [llmDisableThinking, setLlmDisableThinking] = useState(false)
@@ -26,6 +27,7 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
   const [llmSource, setLlmSource] = useState('')
   const [llmSaving, setLlmSaving] = useState(false)
   const [llmSaved, setLlmSaved] = useState(false)
+  const [llmEditing, setLlmEditing] = useState(false)
 
   const [showPass, setShowPass] = useState(false)
   const [showKey, setShowKey] = useState(false)
@@ -44,6 +46,8 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
       setLlmModel(data.model || 'gpt-4o')
       setLlmBaseUrl(data.base_url || '')
       setLlmSource(data.source || '')
+      setLlmDisableThinking(data.disable_thinking || false)
+      if (data.masked_key) setLlmKey(data.masked_key)
     }).catch(() => {})
   }, [open])
 
@@ -83,7 +87,7 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
   }
 
   const handleLlmSave = async () => {
-    if (!llmKey) return
+    if (!llmNewKey) return
     setLlmSaving(true)
     setLlmSaved(false)
 
@@ -92,7 +96,7 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          api_key: llmKey,
+          api_key: llmNewKey,
           model: llmModel,
           base_url: llmBaseUrl,
           disable_thinking: llmDisableThinking,
@@ -101,7 +105,9 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
       setLlmConfigured(true)
       setLlmSaved(true)
       setLlmSource('dashboard')
-      setLlmKey('')
+      setLlmKey(llmNewKey.slice(0, 8) + '***')
+      setLlmNewKey('')
+      setLlmEditing(false)
       setTimeout(() => setLlmSaved(false), 3000)
     } catch {
       /* ignore */
@@ -202,61 +208,79 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
               {llmConfigured && <span className="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">已配置 ({llmSource})</span>}
             </div>
 
-            <p className="text-sm text-slate-500 mb-3">
-              配置 AI 大脑，支持 OpenAI / DeepSeek / 豆包 / Ollama 等兼容 OpenAI API 的服务。
-              也可通过 .env 文件配置。
-            </p>
-
-            <div className="space-y-3">
-              <div className="relative">
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  placeholder="API Key"
-                  value={llmKey}
-                  onChange={e => setLlmKey(e.target.value)}
-                  className="w-full px-3 py-2 pr-10 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
-                />
-                <button onClick={() => setShowKey(!showKey)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 cursor-pointer">
-                  {showKey ? <EyeOff className="w-4 h-4 text-slate-400" /> : <Eye className="w-4 h-4 text-slate-400" />}
-                </button>
+            {llmConfigured && !llmEditing ? (
+              <div className="space-y-2">
+                <div className="px-3 py-2 bg-slate-50 rounded-lg border border-slate-200 text-sm">
+                  <div className="flex justify-between"><span className="text-slate-400">API Key</span><span className="font-mono text-slate-600">{llmKey || '***'}</span></div>
+                  <div className="flex justify-between mt-1"><span className="text-slate-400">模型</span><span className="text-slate-600">{llmModel}</span></div>
+                  {llmBaseUrl && <div className="flex justify-between mt-1"><span className="text-slate-400">Base URL</span><span className="text-slate-600 truncate ml-4">{llmBaseUrl}</span></div>}
+                  {llmDisableThinking && <div className="flex justify-between mt-1"><span className="text-slate-400">深度思考</span><span className="text-slate-600">已关闭</span></div>}
+                </div>
+                <button onClick={() => setLlmEditing(true)} className="text-sm text-violet-500 hover:text-violet-600 cursor-pointer">修改配置</button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="模型名称 (如 gpt-4o)"
-                  value={llmModel}
-                  onChange={e => setLlmModel(e.target.value)}
-                  className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
-                />
-                <input
-                  type="text"
-                  placeholder="Base URL（留空=OpenAI）"
-                  value={llmBaseUrl}
-                  onChange={e => setLlmBaseUrl(e.target.value)}
-                  className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
-                />
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-500">
+                  配置 AI 大脑，支持 OpenAI / DeepSeek / 豆包 / Ollama 等兼容 OpenAI API 的服务。
+                  也可通过 .env 文件配置。
+                </p>
+                <div className="relative">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    placeholder="API Key"
+                    value={llmNewKey}
+                    onChange={e => setLlmNewKey(e.target.value)}
+                    className="w-full px-3 py-2 pr-10 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
+                  />
+                  <button onClick={() => setShowKey(!showKey)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 cursor-pointer">
+                    {showKey ? <EyeOff className="w-4 h-4 text-slate-400" /> : <Eye className="w-4 h-4 text-slate-400" />}
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    placeholder="模型名称 (如 gpt-4o)"
+                    value={llmModel}
+                    onChange={e => setLlmModel(e.target.value)}
+                    className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Base URL（留空=OpenAI）"
+                    value={llmBaseUrl}
+                    onChange={e => setLlmBaseUrl(e.target.value)}
+                    className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={llmDisableThinking}
+                    onChange={e => setLlmDisableThinking(e.target.checked)}
+                    className="rounded"
+                  />
+                  关闭深度思考（豆包必选）
+                </label>
+
+                {llmSaved && <p className="text-sm text-emerald-600 flex items-center gap-1"><Check className="w-4 h-4" />已保存</p>}
+
+                <div className="flex gap-2">
+                  {llmConfigured && (
+                    <button onClick={() => setLlmEditing(false)} className="flex-1 px-4 py-2 text-sm border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
+                      取消
+                    </button>
+                  )}
+                  <button
+                    onClick={handleLlmSave}
+                    disabled={llmSaving || !llmNewKey}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm bg-violet-500 hover:bg-violet-600 disabled:opacity-40 text-white rounded-lg transition-colors cursor-pointer"
+                  >
+                    {llmSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
+                    保存 LLM 配置
+                  </button>
+                </div>
               </div>
-              <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={llmDisableThinking}
-                  onChange={e => setLlmDisableThinking(e.target.checked)}
-                  className="rounded"
-                />
-                关闭深度思考（豆包必选）
-              </label>
-
-              {llmSaved && <p className="text-sm text-emerald-600 flex items-center gap-1"><Check className="w-4 h-4" />已保存</p>}
-
-              <button
-                onClick={handleLlmSave}
-                disabled={llmSaving || !llmKey}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm bg-violet-500 hover:bg-violet-600 disabled:opacity-40 text-white rounded-lg transition-colors cursor-pointer"
-              >
-                {llmSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
-                保存 LLM 配置
-              </button>
-            </div>
+            )}
           </section>
         </div>
       </div>
