@@ -20,11 +20,11 @@ function SensorBadge({ name, value, unit }: { name: string; value: unknown; unit
   const display = value !== null && value !== undefined ? `${value}${unit}` : '--'
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-slate-700/40 rounded-lg">
+    <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-100">
       <Icon className="w-4 h-4 text-slate-400" />
       <div>
-        <p className="text-xs text-slate-500 capitalize">{name}</p>
-        <p className="text-sm font-mono text-slate-200">{display}</p>
+        <p className="text-xs text-slate-400 capitalize">{name}</p>
+        <p className="text-sm font-mono text-slate-700">{display}</p>
       </div>
     </div>
   )
@@ -32,14 +32,14 @@ function SensorBadge({ name, value, unit }: { name: string; value: unknown; unit
 
 function SingleCard({ device }: { device: Device }) {
   return (
-    <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-5">
+    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg font-medium text-white">{device.name}</h3>
+          <h3 className="text-lg font-medium text-slate-800">{device.name}</h3>
           <p className="text-sm text-slate-400">{device.device_id}</p>
         </div>
         <span className={`px-2 py-1 text-xs rounded-full ${
-          device.online ? 'bg-green-500/20 text-green-400' : 'bg-slate-600/30 text-slate-500'
+          device.online ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-400'
         }`}>
           {device.online ? '在线' : '离线'}
         </span>
@@ -56,7 +56,7 @@ function SingleCard({ device }: { device: Device }) {
       {device.capabilities.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {device.capabilities.map((c) => (
-            <span key={c.name} className="px-2 py-0.5 text-xs bg-violet-500/15 text-violet-300 rounded">
+            <span key={c.name} className="px-2 py-0.5 text-xs bg-violet-50 text-violet-600 rounded border border-violet-100">
               {c.name}
             </span>
           ))}
@@ -71,9 +71,9 @@ export default function DeviceCard({ devices, selectedId }: DeviceCardProps) {
   const shown = selected ? [selected] : devices
 
   return (
-    <div className="flex-1 overflow-y-auto p-5">
+    <div className="flex-1 overflow-y-auto p-5 bg-slate-50">
       {shown.length === 0 ? (
-        <div className="flex items-center justify-center h-full text-slate-500">
+        <div className="flex items-center justify-center h-full text-slate-400">
           <div className="text-center">
             <Lightbulb className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p>暂无设备</p>

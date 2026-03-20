@@ -14,6 +14,35 @@ An open-source Agent OS that auto-discovers your hardware devices, empowers each
 - AI-driven decisions — LLM Brain loads domain knowledge and makes smart choices
 - Skill system — each device type gets specialized intelligence, not just on/off control
 - Learns your preferences — evolves over time based on your habits
+- Visual Dashboard — real-time device monitoring, AI decision stream, and chat
+
+## 60 Seconds Quick Start
+
+```bash
+# Clone and enter project
+git clone https://github.com/fulai-tech/Anima.git
+cd Anima
+
+# Install dependencies (frontend + backend, one command)
+pnpm install
+
+# Configure
+cp .env.example .env      # Fill in ANIMA_LLM_API_KEY
+
+# Start MQTT broker
+docker compose up mqtt -d
+
+# Start (Dashboard + Backend together)
+pnpm dev
+```
+
+Open **http://localhost:3000** — you'll see the Anima Dashboard with device list, sensor cards, AI decision stream, and chat bar.
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) >= 18 + [pnpm](https://pnpm.io/) >= 8
+- [uv](https://docs.astral.sh/uv/) (Python package manager, auto-installed by pnpm)
+- [Docker](https://www.docker.com/) (for MQTT broker)
 
 ## Architecture
 
@@ -35,10 +64,11 @@ An open-source Agent OS that auto-discovers your hardware devices, empowers each
           Adapter  Adapter  (v0.2+)
 ```
 
-## What's in v0.1
+## What's Included
 
 | Module | Description |
 |--------|-------------|
+| **Dashboard** | React + Vite + Tailwind — three-column layout with device list, sensor cards, AI decision stream, chat bar |
 | **EventBus** | Async event system with wildcard subscriptions and error isolation |
 | **Rules Engine** | Fast-path safety rules (e.g., "temp > 35°C → AC on"), millisecond response, no LLM needed |
 | **LLM Brain** | Skill-driven AI decisions — loads domain knowledge, assembles context, calls LLM, parses JSON actions |
@@ -49,81 +79,43 @@ An open-source Agent OS that auto-discovers your hardware devices, empowers each
 | **Scheduler** | Periodic device scanning (5 min), preference learning (daily) |
 | **CLI** | Interactive Rich terminal: `devices`, `scan`, `status <id>`, `history` |
 | **REST API** | FastAPI server on port 8080 with 8 endpoints |
-| **Docker Compose** | One-command deployment: core + Mosquitto MQTT broker |
 
-## Quick Start
-
-### Option 1: Docker Compose (Recommended)
-
-```bash
-git clone https://github.com/fulai-tech/Anima.git
-cd Anima
-cp .env.example .env     # Fill in your LLM_API_KEY
-docker compose up -d
-# Open http://localhost:8080
-```
-
-### Option 2: Local Development
-
-```bash
-git clone https://github.com/fulai-tech/Anima.git
-cd Anima
-
-# Install dependencies (requires uv: https://docs.astral.sh/uv/)
-uv sync --extra dev --python 3.13
-
-# Configure
-cp .env.example .env     # Fill in your LLM_API_KEY
-
-# Start MQTT broker
-docker compose up mqtt -d
-
-# Run Anima (API mode)
-uv run python -m core.main
-
-# Or run in CLI mode
-uv run python -m core.main --mode cli
-```
-
-### Configuration (.env)
+## Configuration (.env)
 
 ```env
 # Required: any OpenAI-compatible API key
-LLM_API_KEY=sk-xxx
+ANIMA_LLM_API_KEY=sk-xxx
 
 # Optional: model name (default: gpt-4o)
-LLM_MODEL=gpt-4o
+ANIMA_LLM_MODEL=gpt-4o
 
 # Optional: custom endpoint for DeepSeek / Doubao / Ollama / etc.
-LLM_BASE_URL=https://api.deepseek.com/v1
+ANIMA_LLM_BASE_URL=https://api.deepseek.com/v1
 
-# Optional: Xiaomi Cloud credentials (for token acquisition)
-XIAOMI_CLOUD_USER=
-XIAOMI_CLOUD_PASS=
+# Optional: disable deep thinking (required for Doubao)
+ANIMA_LLM_DISABLE_THINKING=false
 ```
 
 **Supported LLM providers** (any OpenAI-compatible API):
 
-| Provider | LLM_MODEL | LLM_BASE_URL |
-|----------|-----------|--------------|
+| Provider | ANIMA_LLM_MODEL | ANIMA_LLM_BASE_URL |
+|----------|-----------------|---------------------|
 | OpenAI | `gpt-4o` | *(leave empty)* |
 | Anthropic (via proxy) | `claude-sonnet-4-20250514` | your proxy URL |
 | DeepSeek | `deepseek-chat` | `https://api.deepseek.com/v1` |
-| Doubao | `doubao-1.5-pro-32k` | `https://ark.cn-beijing.volces.com/api/v3` |
+| Doubao | `doubao-seed-2-0-lite-260215` | `https://ark.cn-beijing.volces.com/api/v3` |
 | Ollama (local) | `llama3` | `http://localhost:11434/v1` |
 
-## CLI Commands
+## Development Scripts
 
-```
-anima> help
-
-Commands:
-  devices       — List all discovered devices
-  scan          — Re-scan for new devices
-  status <id>   — Show device status (JSON)
-  history       — Show recent AI decisions
-  quit          — Exit CLI
-```
+| Command | Description |
+|---------|-------------|
+| `pnpm install` | Install all dependencies (frontend + backend) |
+| `pnpm dev` | Start Dashboard (port 3000) + Backend (port 8080) together |
+| `pnpm dev:frontend` | Start Dashboard only |
+| `pnpm dev:backend` | Start Python backend only |
+| `pnpm build` | Build Dashboard for production |
+| `uv run pytest tests/ -v` | Run all 55 tests |
 
 ## REST API
 
@@ -135,23 +127,8 @@ Commands:
 | POST | `/api/devices/{id}/command` | Send command to device |
 | POST | `/api/scan` | Trigger device re-scan |
 | GET | `/api/decisions` | Recent AI decision history |
-| POST | `/api/chat` | Chat with Anima (v0.2 full implementation) |
+| POST | `/api/chat` | Chat with Anima |
 | GET | `/api/rooms` | List rooms |
-
-**Example:**
-
-```bash
-# List devices
-curl http://localhost:8080/api/devices
-
-# Trigger scan
-curl -X POST http://localhost:8080/api/scan
-
-# Send command
-curl -X POST http://localhost:8080/api/devices/miot_xxx/command \
-  -H "Content-Type: application/json" \
-  -d '{"device_id":"miot_xxx","action":"set_humidity","params":{"value":55}}'
-```
 
 ## Skill System
 
@@ -177,69 +154,37 @@ skills/
 | **Light** | Circadian lighting (2200K-5000K), time-of-day brightness, transition smoothness |
 | **Coordinator** | Cross-device orchestration — prevents conflicts, creates synergies |
 
-### Decision Flow
-
-```
-Sensor data changes
-  → Rules Engine: threshold breached? (fast path, no LLM)
-  → If not handled → Load Skill knowledge + user memory
-  → Assemble prompt → Call LLM
-  → Parse JSON response → Execute action via adapter
-  → Record to memory (preference evolution)
-```
-
 ## Project Structure
 
 ```
 Anima/
-├── core/                       # Core process
+├── dashboard/                  # Frontend (React + Vite + Tailwind)
+│   └── src/components/         # DeviceList, DeviceCard, DecisionLog, ChatBar, Header
+├── core/                       # Python backend
 │   ├── brain/                  # LLM decision engine + Skill loader
 │   ├── events/                 # Async EventBus
 │   ├── rules/                  # Fast-path rules engine
 │   ├── memory/                 # User memory (markdown + JSON)
 │   ├── scheduler/              # Periodic job scheduler
 │   ├── api/                    # FastAPI REST endpoints
-│   ├── config.py               # Settings (pydantic-settings)
-│   ├── discovery.py            # Device discovery orchestrator
-│   ├── mqtt.py                 # MQTT client wrapper
-│   ├── cli.py                  # Rich interactive CLI
-│   ├── main.py                 # Main entrypoint + Anima orchestrator
-│   └── models.py               # Pydantic data models
+│   └── main.py                 # Main entrypoint
 ├── adapters/                   # Device protocol adapters
-│   ├── base.py                 # BaseAdapter ABC (3 methods to implement)
 │   └── miot/                   # Xiaomi MIoT adapter
-├── skills/                     # AI Skill packages
-│   ├── humidifier/
-│   ├── air_conditioner/
-│   ├── light/
-│   └── coordinator/
+├── skills/                     # AI Skill packages (4 built-in)
 ├── tests/                      # 55 tests
 ├── docs/plans/                 # Design doc + implementation plan
-├── data/memory/                # Runtime user data (gitignored)
-├── mosquitto/                  # Mosquitto MQTT config
-├── pyproject.toml
-├── Dockerfile
-├── docker-compose.yml
-└── .env.example
-```
-
-## Testing
-
-```bash
-# Run all tests (55 tests)
-uv run pytest tests/ -v
-
-# Run specific module tests
-uv run pytest tests/core/test_brain.py -v
-uv run pytest tests/test_integration.py -v
+├── package.json                # pnpm monorepo root
+├── pyproject.toml              # Python dependencies
+├── docker-compose.yml          # MQTT broker + core
+└── .env.example                # Configuration template
 ```
 
 ## Roadmap
 
 | Version | Milestone | Key Features |
 |---------|-----------|-------------|
-| **v0.1** | "It's Alive" (current) | Core framework, MIoT adapter, 4 Skills, CLI + API, Docker |
-| v0.2 | "Now You Can See" | Dashboard (React), Matter adapter, embedded chat, preference learning |
+| **v0.1** | "It's Alive" (current) | Core framework, MIoT adapter, 4 Skills, Dashboard, CLI + API, Docker |
+| v0.2 | "Getting Smarter" | Matter adapter, real-time WebSocket, preference learning, room management |
 | v0.3 | "Community Arrives" | Skill Store, adapter plugins, Telegram Bot, HA bridge |
 | v0.4 | "Getting Stronger" | Multi-user, Raspberry Pi image, security hardening |
 

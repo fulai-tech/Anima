@@ -30,14 +30,14 @@ export default function DeviceList({ devices, selectedId, onSelect }: DeviceList
   }
 
   return (
-    <aside className="w-64 min-w-[256px] bg-slate-800/30 border-r border-slate-700 flex flex-col">
-      <div className="px-4 py-3 border-b border-slate-700">
-        <h2 className="text-sm font-medium text-slate-300 uppercase tracking-wider">设备列表</h2>
+    <aside className="w-64 min-w-[256px] bg-white border-r border-slate-200 flex flex-col">
+      <div className="px-4 py-3 border-b border-slate-200">
+        <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wider">设备列表</h2>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {devices.length === 0 ? (
-          <div className="p-4 text-sm text-slate-500 text-center">
+          <div className="p-4 text-sm text-slate-400 text-center">
             <p>暂无设备</p>
             <p className="mt-1 text-xs">点击右上角「扫描设备」</p>
           </div>
@@ -47,20 +47,20 @@ export default function DeviceList({ devices, selectedId, onSelect }: DeviceList
               <li key={d.device_id}>
                 <button
                   onClick={() => onSelect(d.device_id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-700/50 ${
-                    selectedId === d.device_id ? 'bg-slate-700/70 border-l-2 border-violet-400' : 'border-l-2 border-transparent'
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 ${
+                    selectedId === d.device_id ? 'bg-violet-50 border-l-2 border-violet-500' : 'border-l-2 border-transparent'
                   }`}
                 >
-                  <span className={`${d.online ? 'text-violet-400' : 'text-slate-600'}`}>
+                  <span className={`${d.online ? 'text-violet-500' : 'text-slate-300'}`}>
                     <Icon type={d.type} />
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-200 truncate">{d.name}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-sm font-medium text-slate-700 truncate">{d.name}</p>
+                    <p className="text-xs text-slate-400">
                       {TYPE_LABELS[d.type] || d.type} · {d.adapter}
                     </p>
                   </div>
-                  <span className={`w-2 h-2 rounded-full ${d.online ? 'bg-green-400' : 'bg-slate-600'}`} />
+                  <span className={`w-2 h-2 rounded-full ${d.online ? 'bg-emerald-400' : 'bg-slate-300'}`} />
                 </button>
               </li>
             ))}
@@ -68,7 +68,7 @@ export default function DeviceList({ devices, selectedId, onSelect }: DeviceList
         )}
       </div>
 
-      <div className="px-4 py-3 border-t border-slate-700 text-xs text-slate-500">
+      <div className="px-4 py-3 border-t border-slate-200 text-xs text-slate-400">
         共 {devices.length} 台设备 · {devices.filter(d => d.online).length} 在线
       </div>
     </aside>

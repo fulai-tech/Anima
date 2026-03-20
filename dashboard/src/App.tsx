@@ -12,7 +12,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   return (
-    <div className="h-screen flex flex-col bg-slate-900">
+    <div className="h-screen flex flex-col bg-slate-50">
       <Header deviceCount={devices.length} onScan={refresh} />
 
       <div className="flex flex-1 overflow-hidden">
