@@ -20,6 +20,7 @@ from core.mqtt import MQTTClient
 from core.rules.engine import RulesEngine
 from core.scheduler.scheduler import Scheduler
 from core.models import Event, EventType
+from core.settings_store import SettingsStore
 
 # Adapters
 from adapters.miot.adapter import MIoTAdapter
@@ -33,6 +34,9 @@ logger = logging.getLogger("anima")
 
 class Anima:
     def __init__(self) -> None:
+        # Settings store (runtime config, persisted to data/config.json)
+        self.settings_store = SettingsStore(f"{settings.data_dir}/config.json")
+
         # Core modules
         self.bus = EventBus()
         self.mqtt = MQTTClient()
@@ -43,7 +47,7 @@ class Anima:
         self.scheduler = Scheduler()
 
         # Adapters
-        adapters = [MIoTAdapter()]
+        adapters = [MIoTAdapter(settings_store=self.settings_store)]
         self.discovery = DiscoveryOrchestrator(bus=self.bus, adapters=adapters)
 
     async def start(self, mode: str = "full") -> None:
@@ -85,6 +89,7 @@ class Anima:
                 "brain": self.brain,
                 "memory": self.memory,
                 "bus": self.bus,
+                "settings": self.settings_store,
             }
             app = create_app(app_state)
 

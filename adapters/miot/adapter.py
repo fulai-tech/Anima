@@ -23,15 +23,23 @@ MODEL_TYPE_MAP = {
     "dreame.vacuum": "vacuum",
     "roborock.vacuum": "vacuum",
     "lumi.curtain": "curtain",
+    "lumi.sensor": "sensor",
+    "lumi.gateway": "gateway",
+    "chuangmi.plug": "plug",
+    "chuangmi.camera": "camera",
+    "xiaomi.wifispeaker": "speaker",
+    "xiaomi.repeater": "repeater",
 }
 
 
 class MIoTAdapter(BaseAdapter):
     name = "miot"
 
-    def __init__(self) -> None:
-        self._known_devices: dict[str, miio.Device] = {}  # device_id → miio device object
-        self._device_infos: dict[str, dict] = {}  # device_id → {ip, token, model}
+    def __init__(self, settings_store=None) -> None:
+        self._known_devices: dict[str, miio.Device] = {}
+        self._device_infos: dict[str, dict] = {}
+        self._settings = settings_store
+        self._cloud_logged_in = False
 
     def _guess_device_type(self, model: str) -> str:
         for prefix, dtype in MODEL_TYPE_MAP.items():
@@ -44,7 +52,78 @@ class MIoTAdapter(BaseAdapter):
         safe_model = model.replace(".", "_")
         return f"miot_{safe_ip}_{safe_model}"
 
-    async def discover(self) -> list[Device]:
+    def _build_device_id_from_did(self, did: str) -> str:
+        return f"miot_cloud_{did}"
+
+    # ── Cloud Discovery (primary) ──
+
+    async def _discover_cloud(self) -> list[Device]:
+        """Discover devices via Xiaomi Cloud API — most reliable method."""
+        if not self._settings:
+            return []
+
+        creds = self._settings.get_xiaomi_credentials()
+        if not creds:
+            logger.debug("No Xiaomi Cloud credentials configured, skipping cloud discovery")
+            return []
+
+        username, password = creds
+        country = self._settings.get_xiaomi_country()
+        devices: list[Device] = []
+
+        try:
+            from micloud import MiCloud
+            mc = MiCloud(username=username, password=password)
+            mc.login()
+            self._cloud_logged_in = True
+
+            cloud_devices = mc.get_devices(country=country) or []
+            logger.info("Xiaomi Cloud returned %d devices (country=%s)", len(cloud_devices), country)
+
+            for cd in cloud_devices:
+                try:
+                    did = str(cd.get("did", ""))
+                    ip = cd.get("localip", "")
+                    token = cd.get("token", "")
+                    model = cd.get("model", "unknown")
+                    name = cd.get("name", model)
+                    is_online = cd.get("isOnline", False)
+
+                    if not did:
+                        continue
+
+                    device_id = self._build_device_id_from_did(did)
+                    device_type = self._guess_device_type(model)
+
+                    device = Device(
+                        device_id=device_id,
+                        name=name,
+                        adapter=self.name,
+                        type=device_type,
+                        online=bool(is_online),
+                        capabilities=self._default_capabilities(device_type),
+                        sensors=self._default_sensors(device_type),
+                    )
+                    devices.append(device)
+
+                    if ip and token and token != "0" * 32:
+                        self._device_infos[device_id] = {
+                            "ip": ip, "token": token, "model": model, "did": did,
+                        }
+
+                except Exception:
+                    logger.exception("Failed to process cloud device: %s", cd.get("did", "?"))
+
+        except Exception as e:
+            self._cloud_logged_in = False
+            logger.exception("Xiaomi Cloud discovery failed: %s", e)
+
+        return devices
+
+    # ── mDNS Discovery (fallback) ──
+
+    async def _discover_mdns(self) -> list[Device]:
+        """Discover devices via local mDNS — fallback when cloud is not configured."""
         devices: list[Device] = []
         try:
             found = miio.Discovery.discover_mdns(timeout=5)
@@ -55,7 +134,6 @@ class MIoTAdapter(BaseAdapter):
                     model = getattr(info, "model", "unknown")
 
                     if not token or token == "0" * 32:
-                        logger.debug("Skipping device at %s — no token", ip)
                         continue
 
                     device_id = self._build_device_id(ip, model)
@@ -70,19 +148,24 @@ class MIoTAdapter(BaseAdapter):
                         sensors=self._default_sensors(device_type),
                     )
                     devices.append(device)
-
-                    # Cache miio device object for later control
-                    self._device_infos[device_id] = {
-                        "ip": ip, "token": token, "model": model,
-                    }
+                    self._device_infos[device_id] = {"ip": ip, "token": token, "model": model}
 
                 except Exception:
-                    logger.exception("Failed to process discovered device at %s", addr)
+                    logger.exception("Failed to process mDNS device at %s", addr)
 
         except Exception:
             logger.exception("MIoT mDNS discovery failed")
 
-        logger.info("MIoT discovered %d devices", len(devices))
+        return devices
+
+    async def discover(self) -> list[Device]:
+        # Try cloud first (more reliable), fall back to mDNS
+        devices = await self._discover_cloud()
+        if not devices:
+            logger.info("Cloud discovery returned 0 devices, trying mDNS fallback...")
+            devices = await self._discover_mdns()
+
+        logger.info("MIoT discovered %d devices total", len(devices))
         return devices
 
     def _get_miio_device(self, device_id: str) -> miio.Device | None:
@@ -102,7 +185,6 @@ class MIoTAdapter(BaseAdapter):
             return None
 
     async def subscribe(self, device: Device) -> None:
-        # MIoT doesn't support push — we poll in the scheduler
         pass
 
     async def execute(self, device_id: str, action: str, params: dict[str, Any]) -> ActionResult:
