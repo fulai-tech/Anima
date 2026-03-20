@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Wifi, WifiOff, Brain, Eye, EyeOff, X, Check, Loader2 } from 'lucide-react'
+import { Settings, Wifi, WifiOff, Brain, Eye, EyeOff, X, Check, Loader2, Plus, Monitor } from 'lucide-react'
 
 interface SettingsPanelProps {
   open: boolean
@@ -28,6 +28,15 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
   const [llmSaving, setLlmSaving] = useState(false)
   const [llmSaved, setLlmSaved] = useState(false)
   const [llmEditing, setLlmEditing] = useState(false)
+
+  // Manual device state
+  const [manualIp, setManualIp] = useState('')
+  const [manualToken, setManualToken] = useState('')
+  const [manualName, setManualName] = useState('')
+  const [manualType, setManualType] = useState('unknown')
+  const [manualAdding, setManualAdding] = useState(false)
+  const [manualResult, setManualResult] = useState('')
+  const [manualError, setManualError] = useState('')
 
   const [showPass, setShowPass] = useState(false)
   const [showKey, setShowKey] = useState(false)
@@ -196,6 +205,102 @@ export default function SettingsPanel({ open, onClose, onDevicesChanged }: Setti
                 </button>
               </div>
             )}
+          </section>
+
+          <hr className="border-slate-200" />
+
+          {/* Manual Device Section */}
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <Plus className="w-4 h-4 text-violet-500" />
+              <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">手动添加设备</h3>
+            </div>
+
+            <p className="text-sm text-slate-500 mb-3">
+              输入设备 IP 和 Token 直接添加。Token 可从米家 APP 日志或
+              <a href="https://github.com/PiotrMachworksdev/xiaomi-token-extractor" target="_blank" className="text-violet-500 hover:text-violet-600"> Token 提取工具 </a>
+              获取。
+            </p>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  placeholder="设备 IP (如 192.168.1.100)"
+                  value={manualIp}
+                  onChange={e => setManualIp(e.target.value)}
+                  className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
+                />
+                <input
+                  type="text"
+                  placeholder="设备名称（可选）"
+                  value={manualName}
+                  onChange={e => setManualName(e.target.value)}
+                  className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="Token (32 位十六进制)"
+                value={manualToken}
+                onChange={e => setManualToken(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 font-mono focus:outline-none focus:border-violet-400"
+              />
+              <select
+                value={manualType}
+                onChange={e => setManualType(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-violet-400"
+              >
+                <option value="unknown">自动识别</option>
+                <option value="humidifier">加湿器</option>
+                <option value="air_conditioner">空调</option>
+                <option value="light">灯光</option>
+                <option value="air_purifier">空气净化器</option>
+                <option value="vacuum">扫地机器人</option>
+                <option value="plug">智能插座</option>
+                <option value="curtain">窗帘</option>
+                <option value="sensor">传感器</option>
+              </select>
+
+              {manualError && <p className="text-sm text-red-500">{manualError}</p>}
+              {manualResult && <p className="text-sm text-emerald-600">{manualResult}</p>}
+
+              <button
+                onClick={async () => {
+                  if (!manualIp || !manualToken) return
+                  setManualAdding(true)
+                  setManualError('')
+                  setManualResult('')
+                  try {
+                    const res = await fetch('/api/devices/add', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ ip: manualIp, token: manualToken, name: manualName, device_type: manualType }),
+                    })
+                    const data = await res.json()
+                    if (data.success) {
+                      setManualResult(`已添加: ${data.name} (${data.type})`)
+                      setManualIp('')
+                      setManualToken('')
+                      setManualName('')
+                      setManualType('unknown')
+                      onDevicesChanged()
+                    } else {
+                      setManualError(data.error || '添加失败')
+                    }
+                  } catch {
+                    setManualError('网络错误')
+                  } finally {
+                    setManualAdding(false)
+                  }
+                }}
+                disabled={manualAdding || !manualIp || !manualToken}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm bg-violet-500 hover:bg-violet-600 disabled:opacity-40 text-white rounded-lg transition-colors cursor-pointer"
+              >
+                {manualAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Monitor className="w-4 h-4" />}
+                添加设备
+              </button>
+            </div>
           </section>
 
           <hr className="border-slate-200" />

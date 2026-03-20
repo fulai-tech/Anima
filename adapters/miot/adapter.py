@@ -158,12 +158,50 @@ class MIoTAdapter(BaseAdapter):
 
         return devices
 
+    async def _load_manual_devices(self) -> list[Device]:
+        """Load manually added devices from settings store."""
+        if not self._settings:
+            return []
+
+        manual = self._settings.get("manual_devices", [])
+        devices: list[Device] = []
+
+        for md in manual:
+            ip = md.get("ip", "")
+            token = md.get("token", "")
+            model = md.get("model", "manual")
+            name = md.get("name", f"{model} ({ip})")
+            device_type = md.get("device_type", self._guess_device_type(model))
+
+            device_id = self._build_device_id(ip, model)
+            device = Device(
+                device_id=device_id,
+                name=name,
+                adapter=self.name,
+                type=device_type,
+                online=True,
+                capabilities=self._default_capabilities(device_type),
+                sensors=self._default_sensors(device_type),
+            )
+            devices.append(device)
+            self._device_infos[device_id] = {"ip": ip, "token": token, "model": model}
+
+        if manual:
+            logger.info("Loaded %d manual devices from config", len(manual))
+        return devices
+
     async def discover(self) -> list[Device]:
-        # Try cloud first (more reliable), fall back to mDNS
-        devices = await self._discover_cloud()
-        if not devices:
-            logger.info("Cloud discovery returned 0 devices, trying mDNS fallback...")
-            devices = await self._discover_mdns()
+        # 1. Load manually added devices (always)
+        devices = await self._load_manual_devices()
+
+        # 2. Try cloud discovery
+        cloud_devices = await self._discover_cloud()
+        devices.extend(cloud_devices)
+
+        # 3. mDNS fallback if cloud returned nothing
+        if not cloud_devices:
+            mdns_devices = await self._discover_mdns()
+            devices.extend(mdns_devices)
 
         logger.info("MIoT discovered %d devices total", len(devices))
         return devices

@@ -25,6 +25,13 @@ class LLMConfigRequest(BaseModel):
     disable_thinking: bool = False
 
 
+class ManualDeviceRequest(BaseModel):
+    ip: str
+    token: str
+    name: str = ""
+    device_type: str = "unknown"
+
+
 def create_app(app_state: dict[str, Any]) -> FastAPI:
     app = FastAPI(title="Anima", description="Make Every Hardware Intelligent", version="0.1.0")
 
@@ -82,6 +89,73 @@ def create_app(app_state: dict[str, Any]) -> FastAPI:
         discovery = app_state["discovery"]
         new_devices = await discovery.scan()
         return {"new_devices": len(new_devices), "total": len(discovery.devices)}
+
+    @app.post("/api/devices/add")
+    async def add_manual_device(req: ManualDeviceRequest):
+        """Manually add a device by IP + token."""
+        from adapters.miot.adapter import MIoTAdapter
+        from core.models import Device, Event, EventType
+
+        discovery = app_state["discovery"]
+        store = app_state["settings"]
+
+        # Find the MIoT adapter
+        miot = next((a for a in discovery._adapters if isinstance(a, MIoTAdapter)), None)
+        if not miot:
+            return {"success": False, "error": "MIoT adapter not found"}
+
+        # Try to probe the device to get model info
+        model = "manual"
+        try:
+            import miio
+            dev = miio.Device(ip=req.ip, token=req.token)
+            info = dev.info()
+            model = info.model or "manual"
+        except Exception:
+            pass  # probe failed, use manual defaults
+
+        device_type = req.device_type if req.device_type != "unknown" else miot._guess_device_type(model)
+        device_id = miot._build_device_id(req.ip, model)
+        name = req.name or f"{model} ({req.ip})"
+
+        device = Device(
+            device_id=device_id,
+            name=name,
+            adapter="miot",
+            type=device_type,
+            online=True,
+            capabilities=miot._default_capabilities(device_type),
+            sensors=miot._default_sensors(device_type),
+        )
+
+        # Register in discovery + adapter
+        miot._device_infos[device_id] = {"ip": req.ip, "token": req.token, "model": model}
+        if device_id not in discovery.devices:
+            discovery.devices[device_id] = device
+            discovery._adapter_map[device_id] = miot
+            await discovery._bus.emit(Event(
+                type=EventType.DEVICE_DISCOVERED,
+                device_id=device_id,
+                data=device.model_dump(),
+            ))
+
+        # Save to persistent config
+        manual_devices = store.get("manual_devices", [])
+        # Avoid duplicates
+        manual_devices = [d for d in manual_devices if d.get("ip") != req.ip]
+        manual_devices.append({
+            "ip": req.ip, "token": req.token, "name": name,
+            "device_type": device_type, "model": model,
+        })
+        store.set("manual_devices", manual_devices)
+
+        return {
+            "success": True,
+            "device_id": device_id,
+            "name": name,
+            "type": device_type,
+            "model": model,
+        }
 
     # ── Settings API ──
 
